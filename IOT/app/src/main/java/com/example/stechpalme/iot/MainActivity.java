@@ -1,39 +1,30 @@
 package com.example.stechpalme.iot;
 
-import android.support.v7.app.ActionBarActivity;
+import android.nfc.NfcAdapter;
+import android.app.Activity;
 import android.os.Bundle;
-import android.view.Menu;
-import android.view.MenuItem;
+import android.widget.Toast;
 
 
-public class MainActivity extends ActionBarActivity {
+public class MainActivity extends Activity {
+
+    private NfcAdapter myNFCAdapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-    }
 
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.menu_main, menu);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
-
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            return true;
+        myNFCAdapter = NfcAdapter.getDefaultAdapter(this);
+        if(myNFCAdapter == null) {
+            Toast t = Toast.makeText(this, "NFC is not supported by this device", Toast.LENGTH_LONG);
+            t.show();
+            finish();
+            return;
         }
-
-        return super.onOptionsItemSelected(item);
+        if(!myNFCAdapter.isEnabled()) {
+            Toast t = Toast.makeText(this,"NFC is disabled! Please enable :)",Toast.LENGTH_LONG);
+            t.show();
+        }
     }
 }

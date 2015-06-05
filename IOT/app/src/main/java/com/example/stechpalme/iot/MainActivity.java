@@ -7,6 +7,7 @@ import android.nfc.NdefMessage;
 import android.nfc.NfcAdapter;
 import android.app.Activity;
 import android.nfc.Tag;
+import android.nfc.tech.MifareClassic;
 import android.os.Bundle;
 import android.os.Parcelable;
 import android.widget.TextView;
@@ -55,6 +56,7 @@ public class MainActivity extends Activity {
         }
 
 
+
         String output = "";
         output += "Type: " + intent.getType();
         output += "\nData: " + intent.getData();
@@ -68,6 +70,7 @@ public class MainActivity extends Activity {
             }
         }
         Parcelable[] rawMsg = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES);
+
         if(rawMsg != null) {
             output += "\n\nExtraMsg:";
             NdefMessage[] msgs = new NdefMessage[rawMsg.length];
@@ -92,7 +95,36 @@ public class MainActivity extends Activity {
             }
         }
 
-
+        if(myNFCAdapter.ACTION_TAG_DISCOVERED.equals(intent.getAction())) {
+            Tag tmp = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
+            MifareClassic mfc = MifareClassic.get(tmp);
+            byte[] data = null;
+            try {
+                mfc.connect();
+                int sectors = mfc.getSectorCount();
+                for(int i=0; i<sectors; ++i) {
+                    if(mfc.authenticateSectorWithKeyA(i,MifareClassic.KEY_DEFAULT)) {
+                        int blocks = mfc.getBlockCount();
+                        int index = 0;
+                        for(int j=0; j<blocks; ++j) {
+                            index = mfc.sectorToBlock(i);
+                            data = mfc.readBlock(index);
+                            index++;
+                        }
+                    }
+                }
+            } catch(Exception e) {
+                e.printStackTrace();
+            }
+            if(data != null) {
+                output += "\n\nbytes:\n" + data.toString();
+                output += "\n\nhex:\n" + bytesToHexString(data);
+            }
+            else {
+                Toast t = Toast.makeText(this,"hmm leider nein",Toast.LENGTH_LONG);
+                t.show();
+            }
+        }
 
         myTextView.setText(output);
     }

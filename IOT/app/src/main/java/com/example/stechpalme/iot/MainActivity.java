@@ -8,10 +8,16 @@ import android.nfc.NfcAdapter;
 import android.app.Activity;
 import android.nfc.Tag;
 import android.nfc.tech.MifareClassic;
+import android.nfc.tech.MifareUltralight;
+import android.nfc.tech.Ndef;
+import android.nfc.tech.NfcA;
+import android.nfc.tech.NfcF;
 import android.os.Bundle;
 import android.os.Parcelable;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import java.lang.reflect.MalformedParameterizedTypeException;
 
 /*
 TODO: 3rd part of ex.1
@@ -23,16 +29,40 @@ public class MainActivity extends Activity {
 
     private NfcAdapter myNFCAdapter;
     private TextView myTextView;
-    private IntentFilter[] myFilters;
+    private PendingIntent myPendingIntent;
+    private IntentFilter[] myIntentList;
+    private String[][] myTechList;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        setUpNFC();
+        readNFC(getIntent());
+    }
+    public void onPause() {
+        super.onPause();
+        myNFCAdapter.disableForegroundDispatch(this);
+    }
+
+    public void onResume() {
+        super.onResume();
+        myNFCAdapter.enableForegroundDispatch(this, myPendingIntent, myIntentList, myTechList);
+    }
+
+    public void onNewIntent(Intent intent) {
+        setUpNFC();
+        readNFC(intent);
+    }
+    private void setUpNFC() {
         myTextView = (TextView) findViewById(R.id.myTextView1);
         myNFCAdapter = NfcAdapter.getDefaultAdapter(this);
-        //pendingIntent = PendingIntent.getActivity(this, 0, new Intent(this, getClass()).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), 0);
+        myPendingIntent = PendingIntent.getActivity(this, 0, new Intent(this, getClass()).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), 0);
+        myTechList = new String[][] {
+                new String[] {NfcA.class.getName()},
+                new String[] {Ndef.class.getName()},
+                new String[] {MifareUltralight.class.getName()}};
         if(myNFCAdapter == null) {
             Toast t = Toast.makeText(this, "NFC is not supported by this device", Toast.LENGTH_LONG);
             t.show();
@@ -43,58 +73,62 @@ public class MainActivity extends Activity {
             Toast t = Toast.makeText(this,"NFC is disabled! Please enable :)",Toast.LENGTH_LONG);
             t.show();
         }
-        readNFC(getIntent());
+        defineFilters();
     }
-
-    private void readNFC(Intent intent) {
-        IntentFilter myFilter = new IntentFilter(NfcAdapter.ACTION_NDEF_DISCOVERED);
+    private void defineFilters() {
+        IntentFilter ndefFilter = new IntentFilter(NfcAdapter.ACTION_NDEF_DISCOVERED);
         try {
-            myFilter.addDataType("*/*");
-            myFilters = new IntentFilter[] {myFilter};
-        } catch(Exception e) {
+            ndefFilter.addDataType("*/*");
+            ndefFilter.addDataScheme("http");
+        }catch (IntentFilter.MalformedMimeTypeException e) {
             e.printStackTrace();
         }
-
-
-
+        IntentFilter mifareFilter = new IntentFilter(NfcAdapter.ACTION_TECH_DISCOVERED);
+        myIntentList = new IntentFilter[] {ndefFilter, mifareFilter};
+    }
+    private void readNFC(Intent intent) {
         String output = "";
-        output += "Type: " + intent.getType();
-        output += "\nData: " + intent.getData();
-        output += "\nDataString: " + intent.getDataString();
         Tag tag = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
         if(tag != null) {
-            output += "\nExtraTag:\n";
+            output += "Technology:\n";
             String[] list = tag.getTechList();
             for(String el : list) {
                 output += el + "\n";
             }
+            output += "\nTag ID: " + bytesToHexString(tag.getId());
         }
         Parcelable[] rawMsg = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES);
-
         if(rawMsg != null) {
-            output += "\n\nExtraMsg:";
+            output += "\n\nNDEF Messages:";
             NdefMessage[] msgs = new NdefMessage[rawMsg.length];
             for(int i = 0; i<rawMsg.length; ++i) {
                 msgs[i] = (NdefMessage) rawMsg[i];
             }
             for(int i = 0; i<msgs.length; ++i) {
                 for(int j=0; j<msgs[i].getRecords().length; ++j) {
-                    if (!intent.getData().equals("http://")) {
+                    byte[] payload = msgs[i].getRecords()[j].getPayload();
+                    String parsedPayload = "";
+                    String type =  msgs[i].getRecords()[j].toMimeType();
+                    if(type != null) {
                         try {
-                            byte[] payload = msgs[i].getRecords()[j].getPayload();
-                            output += "\nmessage " + j + ": " + parsePayload(payload);
-                            System.out.println(parsePayload(payload));
+                            parsedPayload = parsePayload(payload);
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
-                    } else {
-                        output += "\nmessage " + j + ": " + msgs[i].getRecords()[j].getPayload().toString();
-                        System.out.println(msgs[i].getRecords()[j].getPayload().toString());
                     }
+                    else {
+                        type = "no type";
+                        try {
+                            parsedPayload = msgs[i].getRecords()[j].toUri().toString();
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+                    output += "\nMessage #" + j + " (Mime:" + type + "):\n" + parsedPayload;
                 }
             }
         }
-
+        /*
         if(myNFCAdapter.ACTION_TAG_DISCOVERED.equals(intent.getAction())) {
             Tag tmp = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
             MifareClassic mfc = MifareClassic.get(tmp);
@@ -124,7 +158,7 @@ public class MainActivity extends Activity {
                 Toast t = Toast.makeText(this,"hmm leider nein",Toast.LENGTH_LONG);
                 t.show();
             }
-        }
+        }*/
 
         myTextView.setText(output);
     }
@@ -134,15 +168,24 @@ public class MainActivity extends Activity {
         String utf16 = "UTF-16";
         String enc = ((input[0] & 0200) == 0) ? utf8 : utf16;
         int langCodeLength = input[0] & 0077;
-        String langCode = new String(input, 1, langCodeLength, "US-ASCII");
         String text = new String(input, langCodeLength + 1, input.length - langCodeLength - 1, enc);
         return text;
     }
-    private String bytesToHexString(byte[] input) {
-        String output = "";
-        for(byte b : input) {
-            output += String.format("%02x",b);
+    //from http://stackoverflow.com/questions/6060312/how-do-you-read-the-unique-id-of-an-nfc-tag-on-android
+    private String bytesToHexString(byte[] src) {
+        StringBuilder stringBuilder = new StringBuilder("0x");
+        if (src == null || src.length <= 0) {
+            return null;
         }
-        return output;
+
+        char[] buffer = new char[2];
+        for (int i = 0; i < src.length; i++) {
+            buffer[0] = Character.forDigit((src[i] >>> 4) & 0x0F, 16);
+            buffer[1] = Character.forDigit(src[i] & 0x0F, 16);
+            //System.out.println(buffer);
+            stringBuilder.append(buffer);
+        }
+
+        return stringBuilder.toString();
     }
 }

@@ -24,6 +24,19 @@
         android:id="@+id/button"
         android:layout_alignParentLeft="true"
         android:layout_alignParentStart="true"
-        android:text="READ RAW DATA"/>
-
+        android:text="READ RAW DATA"
+        android:onClick="handleButton"/>
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentRight="true"
+        android:layout_below="@+id/myTextView1"
+        android:id="@+id/myTextView2"
+        android:maxLines="20"
+        android:scrollbars="vertical"
+        android:background="@color/button_material_light"
+        android:fadeScrollbars="false"
+        android:scrollbarFadeDuration="0"
+        android:visibility="invisible"/>
 </RelativeLayout>

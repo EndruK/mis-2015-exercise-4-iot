@@ -31,7 +31,7 @@ public class MainActivity extends Activity {
     private PendingIntent myPendingIntent;
     private IntentFilter[] myIntentList;
     private String[][] myTechList;
-    Tag myTag;
+    private Tag myTag;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,17 +60,21 @@ public class MainActivity extends Activity {
         raw = (TextView) findViewById(R.id.myTextView2);
         raw.setVisibility(View.INVISIBLE);
         myNFCAdapter = NfcAdapter.getDefaultAdapter(this);
+        //to stay on top and catch all nfc intents
         myPendingIntent = PendingIntent.getActivity(this, 0, new Intent(this, getClass()).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), 0);
+        //our nfc tags only had these tech supports
         myTechList = new String[][] {
                 new String[] {NfcA.class.getName()},
                 new String[] {Ndef.class.getName()},
                 new String[] {MifareUltralight.class.getName()}};
+        //if there is no nfc adapter on the device
         if(myNFCAdapter == null) {
             Toast t = Toast.makeText(this, "NFC is not supported by this device", Toast.LENGTH_LONG);
             t.show();
             finish();
             return;
         }
+        //if the nfc adapter is disabled
         if(!myNFCAdapter.isEnabled()) {
             Toast t = Toast.makeText(this,"NFC is disabled! Please enable :)",Toast.LENGTH_LONG);
             t.show();
@@ -78,6 +82,7 @@ public class MainActivity extends Activity {
         defineFilters();
     }
     private void defineFilters() {
+        //create ndef filter for all data types and urls
         IntentFilter ndefFilter = new IntentFilter(NfcAdapter.ACTION_NDEF_DISCOVERED);
         try {
             ndefFilter.addDataType("*/*");
@@ -85,6 +90,7 @@ public class MainActivity extends Activity {
         }catch (IntentFilter.MalformedMimeTypeException e) {
             e.printStackTrace();
         }
+        //create mifare filter for the mifare technology
         IntentFilter mifareFilter = new IntentFilter(NfcAdapter.ACTION_TECH_DISCOVERED);
         myIntentList = new IntentFilter[] {ndefFilter, mifareFilter};
     }
@@ -92,7 +98,9 @@ public class MainActivity extends Activity {
         String output = "";
         myTag = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
         if(myTag != null) {
+            //read NFC basic content
             output += readTag(myTag);
+            //read ndef formatted content
             output += readNDEF(intent) + "\n";
         }
         else {
@@ -100,14 +108,15 @@ public class MainActivity extends Activity {
         }
         myTextView.setText(output);
     }
+    //handle the "show RAW data" button click
     public void handleButton(View view) {
         raw.setMovementMethod(new ScrollingMovementMethod());
-        raw.setText("");
+        //only when the tag is available (because mifare has to connect)
         if(myTag != null) {
             String result = readMifare(myTag);
             if(!result.equals("")) {
                 raw.setVisibility(View.VISIBLE);
-                raw.append(result);
+                raw.setText(result);
             }
         }
         else {
@@ -130,37 +139,43 @@ public class MainActivity extends Activity {
         if (src == null || src.length <= 0) {
             return null;
         }
-
         char[] buffer = new char[2];
         for (int i = 0; i < src.length; i++) {
             buffer[0] = Character.forDigit((src[i] >>> 4) & 0x0F, 16);
             buffer[1] = Character.forDigit(src[i] & 0x0F, 16);
             stringBuilder.append(buffer);
         }
-
         return stringBuilder.toString();
     }
     private String readNDEF(Intent intent) {
         String output = "";
+        //get the ndef messages
         Parcelable[] rawMsg = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES);
         if (rawMsg != null) {
             output += "\nNDEF Messages:";
+            //parse the ndef formatted messages
             NdefMessage[] msgs = new NdefMessage[rawMsg.length];
             for (int i = 0; i < rawMsg.length; ++i) {
                 msgs[i] = (NdefMessage) rawMsg[i];
             }
+            //iterate over all ndef formatted messages
             for (int i = 0; i < msgs.length; ++i) {
+                //iterate over all payloads
                 for (int j = 0; j < msgs[i].getRecords().length; ++j) {
                     byte[] payload = msgs[i].getRecords()[j].getPayload();
                     String parsedPayload = "";
+                    //get the MIME-Type of the payload
                     String type = msgs[i].getRecords()[j].toMimeType();
+                    //when there is a MIME-Type we have to convert the payload
                     if (type != null) {
                         try {
                             parsedPayload = parsePayload(payload);
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
-                    } else {
+                    }
+                    //or we have something else - in our case it was a URI
+                    else {
                         type = "no type";
                         try {
                             parsedPayload = msgs[i].getRecords()[j].toUri().toString();
@@ -174,6 +189,7 @@ public class MainActivity extends Activity {
         }
         return output;
     }
+    //get the basic NFC content (ID and technologies)
     private String readTag(Tag tag) {
         String output = "";
         output += "Tag ID: " + bytesToHexString(tag.getId());
@@ -184,21 +200,27 @@ public class MainActivity extends Activity {
         }
         return output;
     }
+    //read the Mifare RAW data
     private String readMifare(Tag tag) {
         String output = "";
         MifareUltralight mifare = MifareUltralight.get(tag);
         if (mifare != null) {
             try {
+                //if button is pressed the smartphone has to actual scan the NFC tag
                 mifare.connect();
                 int type = mifare.getType();
                 int len;
+                //there are different types of mifare ultralight chips with different lengths
                 if(type == mifare.TYPE_ULTRALIGHT_C) len = 44;
                 else len = 16;
                 String ascii = "";
                 String hex = "";
+                //iterate over the chip pages
                 for(int i=0; i<len; i=i+4) {
                     byte[]b = mifare.readPages(i);
+                    //convert content to SCII
                     ascii += new String(b,Charset.forName("US-ASCII")) + "\n";
+                    //convert content to Hex
                     hex += bytesToHexString(b) + "\n";
                 }
                 output += "ASCII:\n" + ascii + "\nHEX:\n" + hex;
